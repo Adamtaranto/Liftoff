@@ -106,6 +106,9 @@ class LiftoffConfig:
         Path to the minimap2 executable; searched on ``PATH`` when omitted.
     feature_types : str or None, default None
         File listing additional top-level feature types to lift.
+    all_feature_types : bool, default False
+        Lift every top-level feature type in the annotation instead of only
+        genes (and ``feature_types``).
     infer_genes : bool, default False
         Let gffutils infer gene features from transcripts.
     infer_transcripts : bool, default False
@@ -152,6 +155,7 @@ class LiftoffConfig:
     threads: int = 1
     minimap2: str | None = None
     feature_types: str | None = None
+    all_feature_types: bool = False
     infer_genes: bool = False
     infer_transcripts: bool = False
     chroms: str | None = None
@@ -186,6 +190,8 @@ class LiftoffConfig:
                 raise ConfigError(f'{name} must be between 0 and 1 (got {value})')
         if self.min_identity > self.copy_identity:
             raise ConfigError('copy identity must be greater than or equal to minimum identity')
+        if self.all_feature_types and self.feature_types is not None:
+            raise ConfigError('all feature types cannot be combined with a feature types file')
         if self.chroms is None and self.unplaced is not None:
             raise ConfigError('unplaced sequences can only be used together with chroms')
         if self.threads < 1:

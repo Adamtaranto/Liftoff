@@ -114,7 +114,9 @@ def run_liftoff(config: LiftoffConfig, aligner: Aligner | None = None) -> Liftof
         ref_chroms, target_chroms = parse_chrom_file(config.chroms)
     else:
         ref_chroms, target_chroms = [config.reference], [config.target]
-    parent_types = get_parent_features_to_lift(config.feature_types)
+    parent_types = (
+        None if config.all_feature_types else get_parent_features_to_lift(config.feature_types)
+    )
 
     config.intermediate_path.mkdir(parents=True, exist_ok=True)
     logger.info('extracting features')

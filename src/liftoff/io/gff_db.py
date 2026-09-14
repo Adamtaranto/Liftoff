@@ -7,15 +7,18 @@ Liftoff then classifies every feature as a top-level *parent* (e.g. gene), an
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+import gzip
 import json
 import logging
 from pathlib import Path
 import sqlite3
-from typing import Any
+from typing import IO, Any
 
 import gffutils
 
-from liftoff.errors import GffSyntaxError, InputError
+from liftoff.errors import DuplicateFeatureIdError, GffSyntaxError, InputError
 from liftoff.log import get_logger
 from liftoff.models import Feature, FeatureHierarchy
 from liftoff.utils import ParentOrder, find_parent_order
@@ -57,6 +60,8 @@ def build_database(
         If neither input is provided or a file does not exist.
     GffSyntaxError
         If the annotation cannot be parsed.
+    DuplicateFeatureIdError
+        If distinct features in the annotation share an ``ID``.
     """
     # Preserve percent-encoded characters (e.g. "%3B") exactly as written.
     gffutils.constants.ignore_url_escape_characters = True
@@ -68,6 +73,7 @@ def build_database(
         raise InputError('an annotation file or feature database is required')
     if not Path(gff_file).is_file():
         raise InputError(f'annotation file not found: {gff_file}')
+    validate_unique_ids(gff_file)
     logger.info('building feature database from %s', gff_file)
     try:
         return gffutils.create_db(
@@ -86,6 +92,84 @@ def build_database(
         raise GffSyntaxError(
             line_number, f'incorrect GFF/GTF syntax on line {line_number} of {gff_file}'
         ) from exc
+
+
+#: Number of conflicting IDs listed in a :class:`DuplicateFeatureIdError` message.
+MAX_REPORTED_DUPLICATES = 10
+
+
+@contextmanager
+def _open_annotation(path: str) -> Iterator[IO[str]]:
+    """Open a plain or gzip-compressed annotation file as text."""
+    with Path(path).open('rb') as probe:
+        compressed = probe.read(2) == b'\x1f\x8b'
+    with gzip.open(path, 'rt') if compressed else Path(path).open() as handle:
+        yield handle
+
+
+def _gff3_attributes(column: str) -> dict[str, str]:
+    """Parse GFF3 ``key=value`` attributes; GTF-style attributes yield nothing."""
+    attributes = {}
+    for item in column.split(';'):
+        key, separator, value = item.partition('=')
+        if separator:
+            attributes[key.strip()] = value.strip()
+    return attributes
+
+
+def validate_unique_ids(gff_file: str) -> None:
+    """Check that distinct features in a GFF3 annotation have distinct ``ID`` values.
+
+    GFF3 allows a single feature to span several lines that share an ``ID``
+    (for example a CDS split across exons). Lines sharing an ``ID`` are
+    therefore accepted when they agree on sequence, type, strand and
+    ``Parent``; any other repeated ``ID`` identifies two different features.
+    Such annotations are rejected because gffutils would silently rename one
+    of the features, detaching it from the feature it belongs to. GTF files
+    carry no ``ID`` attribute and are not checked.
+
+    Parameters
+    ----------
+    gff_file : str
+        Plain or gzip-compressed GFF3/GTF annotation.
+
+    Raises
+    ------
+    DuplicateFeatureIdError
+        If any ``ID`` is used by more than one distinct feature.
+    """
+    first_seen: dict[str, tuple[int, tuple[str, str, str, str]]] = {}
+    duplicates: list[tuple[str, int, int]] = []
+    with _open_annotation(gff_file) as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if line.startswith('##FASTA'):
+                break
+            if line.startswith('#') or not line.strip():
+                continue
+            fields = line.rstrip('\r\n').split('\t')
+            if len(fields) < 9:
+                continue  # malformed lines are reported by the GFF parser
+            attributes = _gff3_attributes(fields[8])
+            feature_id = attributes.get('ID')
+            if feature_id is None:
+                continue
+            feature = (fields[0], fields[2], fields[6], attributes.get('Parent', ''))
+            previous = first_seen.setdefault(feature_id, (line_number, feature))
+            if previous[1] != feature:
+                duplicates.append((feature_id, previous[0], line_number))
+    if duplicates:
+        examples = '; '.join(
+            f"ID '{feature_id}' on lines {first} and {second}"
+            for feature_id, first, second in duplicates[:MAX_REPORTED_DUPLICATES]
+        )
+        more = len(duplicates) - MAX_REPORTED_DUPLICATES
+        suffix = f'; and {more} more' if more > 0 else ''
+        raise DuplicateFeatureIdError(
+            duplicates,
+            f'{gff_file}: {len(duplicates)} feature(s) reuse the ID of a different feature. '
+            'IDs must be unique; lines may only share an ID when they are parts of the same '
+            f'feature (same sequence, type, strand and Parent). {examples}{suffix}',
+        )
 
 
 def find_problem_line(gff_file: str) -> int | None:
@@ -133,7 +217,7 @@ def _feature_from_row(row: sqlite3.Row | tuple[Any, ...]) -> Feature:
 
 
 def separate_parents_and_children(
-    feature_db: gffutils.FeatureDB, parent_types_to_lift: list[str]
+    feature_db: gffutils.FeatureDB, parent_types_to_lift: list[str] | None
 ) -> tuple[FeatureHierarchy, ParentOrder]:
     """Classify reference features into parents, intermediates and children.
 
@@ -145,8 +229,9 @@ def separate_parents_and_children(
     ----------
     feature_db : gffutils.FeatureDB
         Reference feature database.
-    parent_types_to_lift : list of str
-        Feature types eligible to be lifted as top-level features.
+    parent_types_to_lift : list of str or None
+        Feature types eligible to be lifted as top-level features; ``None``
+        lifts top-level features of every type.
 
     Returns
     -------
@@ -189,14 +274,14 @@ def _add_parents(
     parent_dict: dict[str, Feature],
     child_dict: dict[str, list[Feature]],
     highest_parents: set[str],
-    parent_types_to_lift: list[str],
+    parent_types_to_lift: list[str] | None,
 ) -> None:
     """Register root features whose type should be lifted."""
     for row in cursor.execute(f'SELECT {_FEATURE_COLUMNS} FROM features ORDER BY rowid').fetchall():
         if row[0] not in highest_parents:
             continue
         parent = _feature_from_row(row)
-        if parent.featuretype in parent_types_to_lift:
+        if parent_types_to_lift is None or parent.featuretype in parent_types_to_lift:
             parent_dict[parent.id] = parent
             child_dict[parent.id] = []
 

@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+import gzip
 from pathlib import Path
 
 import gffutils
 import pytest
 
-from liftoff.errors import GffSyntaxError, InputError
+from liftoff.errors import DuplicateFeatureIdError, GffSyntaxError, InputError
 from liftoff.io.gff_db import (
     annotation_format,
     build_database,
     get_feature_order,
     separate_parents_and_children,
+    validate_unique_ids,
 )
 from liftoff.models import FeatureHierarchy
 from liftoff.utils import ParentOrder
@@ -48,7 +50,7 @@ def feature_db(gff: Path) -> Iterator[gffutils.FeatureDB]:
 
 
 def classify(
-    feature_db: gffutils.FeatureDB, types: list[str]
+    feature_db: gffutils.FeatureDB, types: list[str] | None
 ) -> tuple[FeatureHierarchy, ParentOrder]:
     return separate_parents_and_children(feature_db, types)
 
@@ -130,6 +132,94 @@ class TestSeparateParentsAndChildren:
         hierarchy, _ = classify(feature_db, ['gene'])
         assert set(hierarchy.intermediates) == {'tx1', 'tx2'}
 
+    def test_none_selects_every_top_level_type(self, feature_db: gffutils.FeatureDB) -> None:
+        hierarchy, _ = classify(feature_db, None)
+        assert list(hierarchy.parents) == ['gene2', 'gene1', 'repeat1']
+
     def test_single_level_feature_is_its_own_child(self, feature_db: gffutils.FeatureDB) -> None:
         hierarchy, _ = classify(feature_db, ['gene', 'repeat_region'])
         assert hierarchy.children['repeat1'] == [hierarchy.parents['repeat1']]
+
+
+class TestValidateUniqueIds:
+    GENE = 'chr1\tsrc\tgene\t1\t100\t.\t+\t.\tID=gene1'
+    MRNA = 'chr1\tsrc\tmRNA\t1\t100\t.\t+\t.\tID=tx1;Parent=gene1'
+    CDS_PART_1 = 'chr1\tsrc\tCDS\t1\t30\t.\t+\t0\tID=cds1;Parent=tx1'
+    CDS_PART_2 = 'chr1\tsrc\tCDS\t60\t90\t.\t+\t0\tID=cds1;Parent=tx1'
+
+    @staticmethod
+    def write(tmp_path: Path, *lines: str) -> Path:
+        path = tmp_path / 'annotation.gff3'
+        path.write_text('##gff-version 3\n' + '\n'.join(lines) + '\n')
+        return path
+
+    def test_unique_ids_pass(self, tmp_path: Path) -> None:
+        validate_unique_ids(str(self.write(tmp_path, self.GENE, self.MRNA, self.CDS_PART_1)))
+
+    def test_multi_line_feature_may_repeat_its_id(self, tmp_path: Path) -> None:
+        path = self.write(tmp_path, self.GENE, self.MRNA, self.CDS_PART_1, self.CDS_PART_2)
+        validate_unique_ids(str(path))
+
+    def test_annotation_example_passes(self, gff: Path) -> None:
+        validate_unique_ids(str(gff))
+
+    @pytest.mark.parametrize(
+        'conflicting_line',
+        [
+            pytest.param('chr1\tsrc\tmRNA\t1\t100\t.\t+\t.\tID=gene1', id='different-type'),
+            pytest.param('chr2\tsrc\tgene\t1\t100\t.\t+\t.\tID=gene1', id='different-sequence'),
+            pytest.param('chr1\tsrc\tgene\t1\t100\t.\t-\t.\tID=gene1', id='different-strand'),
+            pytest.param(
+                'chr1\tsrc\tgene\t1\t100\t.\t+\t.\tID=gene1;Parent=locus9',
+                id='different-parent',
+            ),
+        ],
+    )
+    def test_distinct_features_sharing_an_id_are_rejected(
+        self, tmp_path: Path, conflicting_line: str
+    ) -> None:
+        path = self.write(tmp_path, self.GENE, self.MRNA, conflicting_line)
+        with pytest.raises(DuplicateFeatureIdError) as excinfo:
+            validate_unique_ids(str(path))
+        assert excinfo.value.duplicates == [('gene1', 2, 4)]
+
+    def test_message_names_id_and_lines(self, tmp_path: Path) -> None:
+        path = self.write(tmp_path, self.GENE, self.GENE.replace('gene\t', 'pseudogene\t'))
+        with pytest.raises(DuplicateFeatureIdError, match="ID 'gene1' on lines 2 and 3"):
+            validate_unique_ids(str(path))
+
+    def test_message_lists_at_most_ten_conflicts(self, tmp_path: Path) -> None:
+        lines = []
+        for index in range(12):
+            gene = f'chr1\tsrc\tgene\t1\t100\t.\t+\t.\tID=g{index}'
+            lines += [gene, gene.replace('+', '-')]
+        with pytest.raises(DuplicateFeatureIdError, match=r'and 2 more$') as excinfo:
+            validate_unique_ids(str(self.write(tmp_path, *lines)))
+        assert len(excinfo.value.duplicates) == 12
+
+    def test_reads_gzip_compressed_annotations(self, tmp_path: Path) -> None:
+        path = tmp_path / 'annotation.gff3.gz'
+        with gzip.open(path, 'wt') as handle:
+            handle.write(self.GENE + '\n' + self.GENE.replace('+', '-') + '\n')
+        with pytest.raises(DuplicateFeatureIdError):
+            validate_unique_ids(str(path))
+
+    def test_embedded_fasta_is_ignored(self, tmp_path: Path) -> None:
+        path = self.write(
+            tmp_path, self.GENE, '##FASTA', '>gene1', 'ID=gene1\tx\tx\tx\tx\tx\t-\tx\tID=gene1'
+        )
+        validate_unique_ids(str(path))
+
+    def test_gtf_annotations_are_not_checked(self, tmp_path: Path) -> None:
+        path = tmp_path / 'annotation.gtf'
+        exon = 'chr1\tsrc\texon\t{start}\t{end}\t.\t+\t.\tgene_id "g1"; transcript_id "t1";'
+        path.write_text(exon.format(start=1, end=10) + '\n' + exon.format(start=20, end=30) + '\n')
+        validate_unique_ids(str(path))
+
+    def test_build_database_rejects_duplicates_before_writing_database(
+        self, tmp_path: Path
+    ) -> None:
+        path = self.write(tmp_path, self.GENE, self.GENE.replace('+', '-'))
+        with pytest.raises(DuplicateFeatureIdError):
+            build_database(str(path), None)
+        assert not Path(f'{path}_db').exists()

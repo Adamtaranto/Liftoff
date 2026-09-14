@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 from pathlib import Path
 
 import pytest
@@ -50,6 +51,14 @@ class TestFeaturesFileName:
 def test_open_fasta_missing_file(tmp_path: Path) -> None:
     with pytest.raises(InputError, match='not found'):
         open_fasta(str(tmp_path / 'missing.fa'))
+
+
+def test_open_fasta_rejects_plain_gzip(tmp_path: Path) -> None:
+    compressed = tmp_path / 'genome.fa.gz'
+    with gzip.open(compressed, 'wt') as handle:
+        handle.write(f'>chr1\n{SEQUENCE}\n')
+    with pytest.raises(InputError, match='BGZF'):
+        open_fasta(str(compressed))
 
 
 def test_genome_size_sums_all_sequences(genome: Path) -> None:

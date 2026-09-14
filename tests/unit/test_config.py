@@ -41,6 +41,11 @@ def test_defaults_are_valid() -> None:
             {'min_identity': 0.9, 'copy_identity': 0.5}, 'copy identity', id='copy-identity'
         ),
         pytest.param({'unplaced': 'u.txt'}, 'chroms', id='unplaced-without-chroms'),
+        pytest.param(
+            {'all_feature_types': True, 'feature_types': 'types.txt'},
+            'all feature types',
+            id='all-feature-types-with-file',
+        ),
         pytest.param({'threads': 0}, 'threads', id='threads'),
         pytest.param({'distance_factor': 0}, 'distance factor', id='distance-factor'),
         pytest.param({'gap_open': -1}, 'gap_open penalty', id='negative-penalty'),

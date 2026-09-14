@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from pyfaidx import Faidx, Fasta
+from pyfaidx import Fasta, FastaIndexingError, UnsupportedCompressionFormat
 
 from liftoff.errors import InputError
 from liftoff.models import Feature, LiftoverType
@@ -30,13 +30,22 @@ def open_fasta(path: str, *, first_word_keys: bool = False) -> Any:
     Raises
     ------
     InputError
-        If the file does not exist.
+        If the file does not exist, is compressed with plain gzip instead of
+        BGZF, or cannot be indexed.
     """
     if not Path(path).is_file():
         raise InputError(f'FASTA file not found: {path}')
-    if first_word_keys:
-        return Fasta(path, key_function=lambda name: name.split()[0])
-    return Fasta(path)
+    try:
+        if first_word_keys:
+            return Fasta(path, key_function=lambda name: name.split()[0])
+        return Fasta(path)
+    except UnsupportedCompressionFormat as exc:
+        raise InputError(
+            f'{path} is gzip-compressed; compressed FASTA must use BGZF '
+            '(e.g. `gunzip file.fa.gz && bgzip file.fa`) or be decompressed'
+        ) from exc
+    except FastaIndexingError as exc:
+        raise InputError(f'could not index FASTA file {path}: {exc}') from exc
 
 
 def split_target_sequence(
@@ -59,7 +68,7 @@ def split_target_sequence(
     pyfaidx.Fasta
         Reader for the whole target genome.
     """
-    Faidx(target_fasta_name)  # build/refresh the index
+    # Opening the FASTA builds (or refreshes) its .fai index.
     target_fasta = open_fasta(target_fasta_name, first_word_keys=True)
     for chrom in target_chroms:
         if chrom != target_fasta_name:

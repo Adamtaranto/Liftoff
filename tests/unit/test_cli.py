@@ -45,6 +45,10 @@ class TestParsing:
             ),
             pytest.param(['--alignments', 'sams'], 'alignments', 'sams', id='alignments'),
             pytest.param(['--copies'], 'copies', True, id='copies'),
+            pytest.param(['-f', 'types.txt'], 'feature_types', 'types.txt', id='feature-types'),
+            pytest.param(
+                ['--all-feature-types'], 'all_feature_types', True, id='all-feature-types'
+            ),
             pytest.param(['--polish'], 'polish', True, id='polish'),
             pytest.param(['--no-cds'], 'cds', False, id='no-cds'),
             pytest.param(['--exclude-partial'], 'exclude_partial', True, id='exclude-partial'),
@@ -63,6 +67,15 @@ class TestParsing:
     ) -> None:
         with pytest.raises(SystemExit):
             build_parser().parse_args(['-g', 'a.gff', '--db', 'a.db', 't.fa', 'r.fa'])
+        assert 'not allowed with argument' in capsys.readouterr().err
+
+    def test_feature_type_selections_are_mutually_exclusive(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(
+                ['-g', 'a.gff', '-f', 't.txt', '--all-feature-types', 't.fa', 'r.fa']
+            )
         assert 'not allowed with argument' in capsys.readouterr().err
 
     def test_verbose_and_quiet_are_mutually_exclusive(self) -> None:
@@ -117,6 +130,17 @@ class TestMain:
         with pytest.raises(SystemExit) as excinfo:
             main(['-g', 'a.gff', *extra, 't.fa', 'r.fa'])
         assert (excinfo.value.code, message in capsys.readouterr().err) == (2, True)
+
+    def test_broken_pipe_exits_without_traceback(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        def closed_pipe(config: LiftoffConfig) -> None:
+            raise BrokenPipeError
+
+        monkeypatch.setattr(liftoff.pipeline, 'run_liftoff', closed_pipe)
+        monkeypatch.setattr('liftoff.cli._silence_stdout', lambda: None)
+        assert main(['-q', '-g', 'a.gff', 't.fa', 'r.fa']) == 1
+        assert 'Traceback' not in capsys.readouterr().err
 
     def test_liftoff_errors_return_status_one(self, tmp_path: Path) -> None:
         argv = [

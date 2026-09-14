@@ -177,4 +177,4 @@ checks = [
   "GL01", # summary may start on the same line as the opening quotes
   "GL08", # private objects may omit docstrings
 ]
-exclude = ['\.__init__$', '\._[a-z_]+$', '^tests\.', '^scripts\.']
+exclude = ['\.__init__$', '\._\w+$', '^tests\.', '^scripts\.']

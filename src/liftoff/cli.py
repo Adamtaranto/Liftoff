@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 import logging
+import os
 import shlex
 import sys
 
@@ -14,6 +15,16 @@ from liftoff.errors import ConfigError, LiftoffError
 from liftoff.log import configure_logging, get_logger
 
 logger = get_logger(__name__)
+
+
+class _HelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
+    """Show defaults only for options that have a meaningful default value."""
+
+    def _get_help_string(self, action: argparse.Action) -> str | None:
+        # Identity checks, so numeric defaults such as 0.0 are still shown.
+        if action.default is None or action.default is False or action.default is argparse.SUPPRESS:
+            return action.help
+        return super()._get_help_string(action)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -27,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='liftoff',
         description='Lift features from one genome assembly to another.',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=_HelpFormatter,
     )
     parser.add_argument('-V', '--version', action='version', version=f'%(prog)s {__version__}')
 
@@ -127,11 +138,17 @@ def build_parser() -> argparse.ArgumentParser:
     misc.add_argument(
         '-p', '--threads', default=1, type=int, metavar='P', help='parallel alignment processes'
     )
-    misc.add_argument(
+    feature_selection = misc.add_mutually_exclusive_group()
+    feature_selection.add_argument(
         '-f',
         '--feature-types',
         metavar='FILE',
         help='file listing additional top-level feature types to lift (one per line)',
+    )
+    feature_selection.add_argument(
+        '--all-feature-types',
+        action='store_true',
+        help='lift every top-level feature type in the annotation, not only genes',
     )
     misc.add_argument(
         '--infer-genes',
@@ -234,6 +251,7 @@ def config_from_args(args: argparse.Namespace, argv: Sequence[str]) -> LiftoffCo
         threads=args.threads,
         minimap2=args.minimap2,
         feature_types=args.feature_types,
+        all_feature_types=args.all_feature_types,
         infer_genes=args.infer_genes,
         infer_transcripts=args.infer_transcripts,
         chroms=args.chroms,
@@ -283,4 +301,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     except LiftoffError as exc:
         logger.error('%s', exc)
         return 1
+    except BrokenPipeError:
+        # Output piped into a command that exited early (e.g. `liftoff ... | head`).
+        _silence_stdout()
+        return 1
     return 0
+
+
+def _silence_stdout() -> None:
+    """Point stdout at the null device so the interpreter's final flush cannot fail."""
+    try:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+    except (OSError, ValueError, AttributeError):  # pragma: no cover - stdout without a fd
+        pass

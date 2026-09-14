@@ -37,5 +37,21 @@ class GffSyntaxError(InputError):
         super().__init__(message)
 
 
+class DuplicateFeatureIdError(InputError):
+    """Raised when distinct features in an annotation share an ``ID``.
+
+    Parameters
+    ----------
+    duplicates : list of tuple
+        ``(feature_id, first_line, duplicate_line)`` for each conflict found.
+    message : str
+        Human readable description of the problem.
+    """
+
+    def __init__(self, duplicates: list[tuple[str, int, int]], message: str) -> None:
+        self.duplicates = duplicates
+        super().__init__(message)
+
+
 class AlignmentError(LiftoffError):
     """Raised when an alignment backend fails to produce a SAM file."""
