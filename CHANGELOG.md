@@ -1,0 +1,82 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
+project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Breaking changes
+
+- **Command line interface redesigned** with conventional `--long-options`. Single-dash long
+  options were renamed, for example `-db` → `--db`, `-dir` → `--intermediate-dir`,
+  `-mm2_options` → `--mm2-options`, `-exclude_partial` → `--exclude-partial`,
+  `-infer_genes` → `--infer-genes`, `-sc` → `--copy-identity`, `-overlap` → `--max-overlap`,
+  `-gap_open` → `--gap-open` and `-m` → `--minimap2`. Single-letter options are unchanged and
+  now also have long forms (e.g. `-g/--gff`, `-a/--min-coverage`, `-p/--threads`). See the
+  migration table in the README.
+- **Python 3.12 or newer is required** (tested on 3.12, 3.13 and 3.14).
+- Progress messages are written to standard error via the `logging` module; errors exit with
+  status 1 and a message instead of a traceback.
+- Intermediate files of the `--copies` stage are named `reference_all_copies_*` so that every
+  stage's SAM file has a unique name.
+
+### Added
+
+- Pluggable alignment backends (`liftoff.align`): `Minimap2Aligner` (default),
+  `PrecomputedSamAligner` (`--alignments DIR`, use SAM files produced elsewhere) and
+  `CallableAligner` (delegate alignment to a Python function).
+- Library API: `liftoff.pipeline.run_liftoff(config, aligner=None)` with a typed
+  `LiftoffConfig` and a `LiftoffResult` return value.
+- Pyodide/WebAssembly support: every runtime dependency is pure Python or shipped by Pyodide,
+  worker processes are only used where available, and the test suite runs under Pyodide in CI.
+- `--no-cds` to skip CDS status annotation, `-v/--verbose` and `-q/--quiet`.
+- `python -m liftoff` entry point and `py.typed` marker.
+- `environment.yml` conda environment, GitHub Actions CI (ruff, mypy, pytest on Linux and macOS
+  with Python 3.12–3.14, Pyodide tests), pre-commit hooks and this changelog.
+- Extensive tests: whole-genome and chromosome I integration tests against recorded reference
+  outputs, parasail comparison corpora, and unit tests for SAM parsing, alignment blocks, CDS
+  handling, polishing, output formatting and the CLI.
+
+### Changed
+
+- Packaging migrated from `setup.py` to `pyproject.toml`, built with hatchling; the version is
+  derived from git tags with hatch-vcs. The package now uses a `src/` layout, and tests moved to
+  the repository root.
+- Code reorganised into `align`, `io` and `mapping` subpackages with typed dataclass models,
+  full type hints (mypy strict) and numpydoc docstrings.
+- **Removed the `parasail` dependency**: polishing uses a NumPy port of
+  `sg_dx_trace_scan_sat` that reproduces parasail's scores and tracebacks exactly.
+- **Removed the `pysam` dependency** in favour of a small pure-Python SAM reader with identical
+  semantics.
+- **Removed the `interlap` and `ujson` dependencies** (replaced by an internal interval index
+  and the standard library `json`).
+- Dependency minimums raised to biopython 1.87, gffutils 0.14, networkx 3.6, numpy 2.4 and
+  pyfaidx 0.9.
+- Feature database queries use explicit ordering instead of string-built `IN (...)` lists.
+- Alignment jobs run with `--threads` > 1 are collected in a deterministic order, and overlapping
+  features are re-mapped in sorted order, making results independent of process scheduling and
+  hash randomisation.
+- minimap2 options required by Liftoff are merged by whole tokens rather than substring
+  matching, and minimap2 failures are reported as errors.
+- Faster overall (whole-genome yeast lift-over in about 8 s instead of about 20 s).
+
+### Fixed
+
+- Broken CDSs are now trimmed to the longest intact ORF (at least 180 bases, searched in all
+  three frames), with CDS phases recomputed; `valid_ORF` flags describe the trimmed CDS.
+  Previously the ORF was found but the CDS was never adjusted.
+- Polishing no longer shifts reference exon coordinates: splice-site extensions are computed
+  without modifying the exons, instead of being added and imperfectly removed.
+- Selecting a polished gene compares valid ORF counts, sequence identity and coverage
+  numerically; previously strings were compared (so `'9' > '10'`), and a polished gene whose CDS
+  failed to lift always replaced the original.
+- `--flank` is applied from the annotated coordinates at every stage, so it no longer widens
+  features repeatedly, and single-level features are written at their annotated coordinates
+  instead of including the flank.
+- `-cds` could not be disabled.
+- A missing space when appending `--end-bonus 5` to user-supplied minimap2 options.
+- Output files and SQLite connections are now closed properly.
+- The previous tests never compared GFF output lines; the expected outputs were stale and have
+  been regenerated.

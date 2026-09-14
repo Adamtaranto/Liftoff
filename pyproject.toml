@@ -1,0 +1,161 @@
+[build-system]
+requires = ["hatchling>=1.27", "hatch-vcs>=0.5"]
+build-backend = "hatchling.build"
+
+[project]
+name = "Liftoff"
+dynamic = ["version"]
+description = "An accurate GFF3/GTF lift over pipeline between genome assemblies"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE.md"]
+authors = [{ name = "Alaina Shumate", email = "ashumat2@jhmi.edu" }]
+requires-python = ">=3.12"
+keywords = ["bioinformatics", "genomics", "annotation", "liftover", "gff3"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+  "Typing :: Typed",
+]
+# Lower bounds track the newest releases that are also shipped by Pyodide, so
+# that every runtime dependency can be installed in a WebAssembly environment.
+dependencies = [
+  "biopython>=1.87",
+  "gffutils>=0.14",
+  "networkx>=3.6",
+  "numpy>=2.4",
+  "pyfaidx>=0.9",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=2.3",
+  "pre-commit>=4.6",
+  "pytest>=9.1",
+  "pytest-cov>=7.1",
+  "ruff>=0.16",
+]
+
+[project.urls]
+Homepage = "https://github.com/agshumate/Liftoff"
+Issues = "https://github.com/agshumate/Liftoff/issues"
+
+[project.scripts]
+liftoff = "liftoff.cli:main"
+
+# ---------------------------------------------------------------------------
+# Build
+# ---------------------------------------------------------------------------
+[tool.hatch.version]
+source = "vcs"
+tag-pattern = '^v(?P<version>.+)$'
+fallback-version = "0.0.0"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/liftoff/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/liftoff"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/.github", "/tests/data/yeast", "/tests/data/expected/yeast_*"]
+
+# ---------------------------------------------------------------------------
+# Tooling
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+extend-exclude = ["src/liftoff/_version.py"]
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "F",
+  "W",
+  "I",
+  "UP",
+  "B",
+  "SIM",
+  "C4",
+  "PERF",
+  "RUF",
+  "D",
+  "N",
+  "PT",
+  "PTH",
+]
+ignore = [
+  "D105", # magic methods do not need docstrings
+  "D107", # __init__ is documented on the class
+]
+
+[tool.ruff.lint.isort]
+known-third-party = ["Bio"]
+known-first-party = ["liftoff"]
+default-section = "third-party"
+force-sort-within-sections = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "PTH"]
+"scripts/**" = ["D", "PTH", "N", "E501"]
+
+[tool.ruff.format]
+docstring-code-format = true
+indent-style = "space"
+quote-style = "single"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+exclude = ["src/liftoff/_version.py"]
+# Biopython ships no type annotations.
+untyped_calls_exclude = ["Bio"]
+
+[[tool.mypy.overrides]]
+module = [
+  "gffutils",
+  "gffutils.*",
+  "pyfaidx",
+  "networkx",
+  "networkx.*",
+  "Bio",
+  "Bio.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers", "--import-mode=importlib"]
+markers = [
+  "minimap2: requires the minimap2 executable on PATH",
+  "slow: long-running whole-genome integration tests",
+]
+
+[tool.coverage.run]
+source = ["liftoff"]
+omit = ["*/_version.py"]
+
+[tool.numpydoc_validation]
+checks = [
+  "all",  # report on all checks, except the below
+  "EX01", # examples section not required
+  "SA01", # see also section not required
+  "ES01", # extended summary not required
+  "RT02", # allow named return values
+  "GL01", # summary may start on the same line as the opening quotes
+  "GL08", # private objects may omit docstrings
+]
+exclude = ['\.__init__$', '\._[a-z_]+$', '^tests\.', '^scripts\.']
