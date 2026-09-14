@@ -20,8 +20,9 @@ jobs:
       - uses: astral-sh/setup-uv@v10.1.0 # no floating v10 tag is published
         with:
           python-version: '3.13'
+          activate-environment: true # uv-managed Python in a venv used by later steps
       - name: Install package with dev extras
-        run: uv pip install --system -e ".[dev]" types-networkx
+        run: uv pip install -e ".[dev]" types-networkx
       - name: ruff check (and fix)
         # Apply safe autofixes, then fail if anything had to be fixed so that
         # the committed code is always lint-clean.
