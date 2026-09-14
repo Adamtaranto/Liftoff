@@ -21,10 +21,24 @@ class _HelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
     """Show defaults only for options that have a meaningful default value."""
 
     def _get_help_string(self, action: argparse.Action) -> str | None:
+        default = action.default
         # Identity checks, so numeric defaults such as 0.0 are still shown.
-        if action.default is None or action.default is False or action.default is argparse.SUPPRESS:
+        if (
+            default is None
+            or default is False
+            or default is argparse.SUPPRESS
+            or (isinstance(default, list) and not default)
+        ):
             return action.help
         return super()._get_help_string(action)
+
+
+def _comma_separated(value: str) -> list[str]:
+    """Split a comma-separated option value into non-empty names."""
+    names = [name.strip() for name in value.split(',')]
+    if not all(names):
+        raise argparse.ArgumentTypeError(f'empty name in {value!r}')
+    return names
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -151,6 +165,15 @@ def build_parser() -> argparse.ArgumentParser:
         help='lift every top-level feature type in the annotation, not only genes',
     )
     misc.add_argument(
+        '--exclude-feature-types',
+        metavar='TYPES',
+        type=_comma_separated,
+        action='extend',
+        default=[],
+        help='comma-separated top-level feature types not to lift, e.g. region,centromere '
+        '(may be repeated)',
+    )
+    misc.add_argument(
         '--infer-genes',
         action='store_true',
         help='annotation only contains transcripts and exon/CDS features',
@@ -252,6 +275,7 @@ def config_from_args(args: argparse.Namespace, argv: Sequence[str]) -> LiftoffCo
         minimap2=args.minimap2,
         feature_types=args.feature_types,
         all_feature_types=args.all_feature_types,
+        exclude_feature_types=tuple(args.exclude_feature_types),
         infer_genes=args.infer_genes,
         infer_transcripts=args.infer_transcripts,
         chroms=args.chroms,

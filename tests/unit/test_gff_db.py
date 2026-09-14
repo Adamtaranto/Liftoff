@@ -136,6 +136,37 @@ class TestSeparateParentsAndChildren:
         hierarchy, _ = classify(feature_db, None)
         assert list(hierarchy.parents) == ['gene2', 'gene1', 'repeat1']
 
+    @pytest.mark.parametrize(
+        ('types', 'excluded', 'expected'),
+        [
+            pytest.param(None, ['repeat_region'], ['gene2', 'gene1'], id='all-types-minus-one'),
+            pytest.param(['gene'], ['gene'], [], id='exclusion-wins-over-selection'),
+            pytest.param(['gene', 'repeat_region'], ['gene'], ['repeat1'], id='selected-minus-one'),
+        ],
+    )
+    def test_excluded_types_are_not_lifted(
+        self,
+        feature_db: gffutils.FeatureDB,
+        types: list[str] | None,
+        excluded: list[str],
+        expected: list[str],
+    ) -> None:
+        hierarchy, _ = separate_parents_and_children(feature_db, types, excluded)
+        assert list(hierarchy.parents) == expected
+
+    def test_excluded_parents_have_no_children(self, feature_db: gffutils.FeatureDB) -> None:
+        hierarchy, _ = separate_parents_and_children(feature_db, None, ['repeat_region'])
+        assert 'repeat1' not in hierarchy.children
+
+    def test_warns_about_exclusions_that_match_no_top_level_type(
+        self, feature_db: gffutils.FeatureDB, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level('WARNING', logger='liftoff'):
+            separate_parents_and_children(feature_db, None, ['exon', 'regoin', 'repeat_region'])
+        assert caplog.messages == [
+            'excluded feature types not found among top-level features: exon, regoin'
+        ]
+
     def test_single_level_feature_is_its_own_child(self, feature_db: gffutils.FeatureDB) -> None:
         hierarchy, _ = classify(feature_db, ['gene', 'repeat_region'])
         assert hierarchy.children['repeat1'] == [hierarchy.parents['repeat1']]

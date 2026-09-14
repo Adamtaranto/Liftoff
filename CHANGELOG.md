@@ -37,6 +37,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   worker processes are only used where available, and the test suite runs under Pyodide in CI.
 - `--all-feature-types` to lift every top-level feature type in the annotation instead of only
   genes (and types listed with `-f`).
+- `--exclude-feature-types TYPES` (comma-separated, repeatable) to skip top-level feature types
+  such as `region`, with a warning for types that are not present as top-level features.
 - `--no-cds` to skip CDS status annotation, `-v/--verbose` and `-q/--quiet`.
 - `python -m liftoff` entry point and `py.typed` marker.
 - `environment.yml` conda environment, GitHub Actions CI (ruff, mypy, pytest on Linux and macOS

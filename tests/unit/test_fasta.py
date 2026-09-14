@@ -116,7 +116,7 @@ class TestWriteGeneSequences:
         assert gene.annotated_bounds == (101, 200)
 
     def test_rejects_empty_feature_set(self, genome: Path, tmp_path: Path) -> None:
-        with pytest.raises(InputError, match='does not contain any gene features'):
+        with pytest.raises(InputError, match='no top-level features were selected'):
             write_gene_sequences(
                 {}, [str(genome)], str(genome), tmp_path, LiftoverType.CHROM_BY_CHROM, 0
             )

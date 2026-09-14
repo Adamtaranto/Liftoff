@@ -7,7 +7,7 @@ Liftoff then classifies every feature as a top-level *parent* (e.g. gene), an
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from contextlib import contextmanager
 import gzip
 import json
@@ -217,7 +217,9 @@ def _feature_from_row(row: sqlite3.Row | tuple[Any, ...]) -> Feature:
 
 
 def separate_parents_and_children(
-    feature_db: gffutils.FeatureDB, parent_types_to_lift: list[str] | None
+    feature_db: gffutils.FeatureDB,
+    parent_types_to_lift: list[str] | None,
+    excluded_types: Collection[str] = (),
 ) -> tuple[FeatureHierarchy, ParentOrder]:
     """Classify reference features into parents, intermediates and children.
 
@@ -232,6 +234,9 @@ def separate_parents_and_children(
     parent_types_to_lift : list of str or None
         Feature types eligible to be lifted as top-level features; ``None``
         lifts top-level features of every type.
+    excluded_types : collection of str, default ()
+        Top-level feature types never to lift. A warning is logged for any
+        type that does not occur as a top-level feature in the annotation.
 
     Returns
     -------
@@ -262,7 +267,15 @@ def separate_parents_and_children(
     parent_dict: dict[str, Feature] = {}
     child_dict: dict[str, list[Feature]] = {}
     intermediate_dict: dict[str, Feature] = {}
-    _add_parents(cursor, parent_dict, child_dict, highest_parents, parent_types_to_lift)
+    top_level_types = _add_parents(
+        cursor, parent_dict, child_dict, highest_parents, parent_types_to_lift, excluded_types
+    )
+    unused_exclusions = sorted(set(excluded_types) - top_level_types)
+    if unused_exclusions:
+        logger.warning(
+            'excluded feature types not found among top-level features: %s',
+            ', '.join(unused_exclusions),
+        )
     _add_children(cursor, feature_db, parent_dict, child_dict, lowest_children)
     _add_intermediates(cursor, feature_db, intermediate_dict, intermediates)
     parent_order = find_parent_order(list(parent_dict.values()))
@@ -275,15 +288,21 @@ def _add_parents(
     child_dict: dict[str, list[Feature]],
     highest_parents: set[str],
     parent_types_to_lift: list[str] | None,
-) -> None:
-    """Register root features whose type should be lifted."""
+    excluded_types: Collection[str],
+) -> set[str]:
+    """Register root features whose type should be lifted; return all root types seen."""
+    top_level_types: set[str] = set()
     for row in cursor.execute(f'SELECT {_FEATURE_COLUMNS} FROM features ORDER BY rowid').fetchall():
         if row[0] not in highest_parents:
             continue
         parent = _feature_from_row(row)
+        top_level_types.add(parent.featuretype)
+        if parent.featuretype in excluded_types:
+            continue
         if parent_types_to_lift is None or parent.featuretype in parent_types_to_lift:
             parent_dict[parent.id] = parent
             child_dict[parent.id] = []
+    return top_level_types
 
 
 def _add_children(

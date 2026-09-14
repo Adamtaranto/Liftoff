@@ -109,6 +109,9 @@ class LiftoffConfig:
     all_feature_types : bool, default False
         Lift every top-level feature type in the annotation instead of only
         genes (and ``feature_types``).
+    exclude_feature_types : tuple of str, default ()
+        Top-level feature types never to lift (e.g. ``'region'``). Applied
+        after ``feature_types`` / ``all_feature_types``.
     infer_genes : bool, default False
         Let gffutils infer gene features from transcripts.
     infer_transcripts : bool, default False
@@ -156,6 +159,7 @@ class LiftoffConfig:
     minimap2: str | None = None
     feature_types: str | None = None
     all_feature_types: bool = False
+    exclude_feature_types: tuple[str, ...] = ()
     infer_genes: bool = False
     infer_transcripts: bool = False
     chroms: str | None = None
@@ -192,6 +196,12 @@ class LiftoffConfig:
             raise ConfigError('copy identity must be greater than or equal to minimum identity')
         if self.all_feature_types and self.feature_types is not None:
             raise ConfigError('all feature types cannot be combined with a feature types file')
+        if isinstance(self.exclude_feature_types, str):
+            raise ConfigError('exclude_feature_types must be a sequence of feature type names')
+        if any(not name.strip() or name != name.strip() for name in self.exclude_feature_types):
+            raise ConfigError('excluded feature types must be non-empty names without spaces')
+        # Normalise to a de-duplicated tuple, preserving the given order.
+        self.exclude_feature_types = tuple(dict.fromkeys(self.exclude_feature_types))
         if self.chroms is None and self.unplaced is not None:
             raise ConfigError('unplaced sequences can only be used together with chroms')
         if self.threads < 1:

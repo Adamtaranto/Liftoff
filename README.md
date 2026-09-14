@@ -67,10 +67,12 @@ Repair CDSs broken by the lift-over (writes `target.gff3` and `target.gff3_polis
 liftoff -g reference.gff3 -o target.gff3 --polish target.fa reference.fa
 ```
 
-Lift every top-level feature type in the annotation (not only genes):
+Lift every top-level feature type in the annotation (not only genes), except chromosome-length
+`region` records and centromeres:
 
 ```
-liftoff -g reference.gff3 -o target.gff3 --all-feature-types target.fa reference.fa
+liftoff -g reference.gff3 -o target.gff3 --all-feature-types \
+    --exclude-feature-types region,centromere target.fa reference.fa
 ```
 
 Lift additional top-level feature types listed in a file and pass extra options to minimap2:
@@ -85,9 +87,10 @@ liftoff -g reference.gff3 -o target.gff3 -f feature_types.txt \
 usage: liftoff [-h] [-V] (-g GFF | --db DB) [-o FILE] [-u FILE] [--exclude-partial]
                [--intermediate-dir DIR] [--mm2-options STR] [--minimap2 PATH] [--alignments DIR]
                [-a A] [-s S] [-d D] [--flank F] [-p P] [-f FILE | --all-feature-types]
-               [--infer-genes] [--infer-transcripts] [--chroms FILE] [--unplaced FILE] [--copies]
-               [--copy-identity SC] [--max-overlap O] [--mismatch M] [--gap-open GO]
-               [--gap-extend GE] [--polish] [--cds | --no-cds] [-v | -q]
+               [--exclude-feature-types TYPES] [--infer-genes] [--infer-transcripts]
+               [--chroms FILE] [--unplaced FILE] [--copies] [--copy-identity SC] [--max-overlap O]
+               [--mismatch M] [--gap-open GO] [--gap-extend GE] [--polish] [--cds | --no-cds]
+               [-v | -q]
                target reference
 
 Lift features from one genome assembly to another.
@@ -136,6 +139,9 @@ Lift-over settings:
   -f, --feature-types FILE
                         file listing additional top-level feature types to lift (one per line)
   --all-feature-types   lift every top-level feature type in the annotation, not only genes
+  --exclude-feature-types TYPES
+                        comma-separated top-level feature types not to lift, e.g.
+                        region,centromere (may be repeated)
   --infer-genes         annotation only contains transcripts and exon/CDS features
   --infer-transcripts   annotation only contains genes and exon/CDS features
   --chroms FILE         comma separated file of corresponding reference,target chromosomes
@@ -178,6 +184,7 @@ have been renamed as follows (single-letter options are unchanged):
 | `-polish` | `--polish` |
 | `-cds` (could not be disabled) | `--cds` / `--no-cds` |
 | — | `--all-feature-types` (lift every top-level feature type) |
+| — | `--exclude-feature-types TYPES` (top-level feature types not to lift) |
 | — | `--alignments DIR` (use pre-computed SAM files) |
 | — | `-v/--verbose`, `-q/--quiet` |
 
@@ -198,6 +205,8 @@ repeat_element
 ```
 
 Alternatively, `--all-feature-types` lifts every top-level feature in the annotation — any feature without a parent, whatever its type — together with its child features (it cannot be combined with `-f`). This also includes features such as chromosome-length `region` records, and features too short to align with minimap2 (for example yeast centromere elements of about 25 bp) are reported as unmapped. Lifting additional feature types does not change how genes are lifted.
+
+Use `--exclude-feature-types` with a comma-separated list (the option may be repeated) to skip top-level feature types, whichever way the types were selected. For example, `--all-feature-types --exclude-feature-types region,centromere` lifts everything except chromosome regions and centromeres, which avoids aligning whole chromosomes as single features. Excluded features and their children are neither lifted nor listed as unmapped. Only top-level types can be excluded; Liftoff warns about any listed type that does not occur as a top-level feature (for example a misspelling, or a child type such as `exon`).
 
 ### Feature IDs
 Feature IDs may not contain spaces and must be unique: two different features may not share an `ID`. When building the feature database from a GFF3 file, Liftoff checks this and stops with an error listing the conflicting IDs and their line numbers. A single feature spanning several lines (for example a CDS split across exons) may repeat its `ID` on each line, provided those lines have the same sequence, feature type, strand and `Parent`. GTF files carry no `ID` attribute and are not checked, and neither are pre-built databases passed with `--db`.

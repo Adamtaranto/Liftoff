@@ -41,6 +41,11 @@ def test_defaults_are_valid() -> None:
             {'min_identity': 0.9, 'copy_identity': 0.5}, 'copy identity', id='copy-identity'
         ),
         pytest.param({'unplaced': 'u.txt'}, 'chroms', id='unplaced-without-chroms'),
+        pytest.param({'exclude_feature_types': 'region'}, 'sequence', id='exclusions-as-string'),
+        pytest.param({'exclude_feature_types': ('',)}, 'non-empty', id='empty-exclusion'),
+        pytest.param(
+            {'exclude_feature_types': (' region',)}, 'without spaces', id='padded-exclusion'
+        ),
         pytest.param(
             {'all_feature_types': True, 'feature_types': 'types.txt'},
             'all feature types',
@@ -54,6 +59,11 @@ def test_defaults_are_valid() -> None:
 def test_invalid_options_raise_config_error(overrides: dict[str, Any], message: str) -> None:
     with pytest.raises(ConfigError, match=message):
         make_config(**overrides)
+
+
+def test_excluded_feature_types_are_deduplicated_in_order() -> None:
+    config = make_config(exclude_feature_types=('region', 'centromere', 'region'))
+    assert config.exclude_feature_types == ('region', 'centromere')
 
 
 def test_intermediate_path_is_a_path() -> None:

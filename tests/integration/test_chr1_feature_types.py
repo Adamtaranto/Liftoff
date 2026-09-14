@@ -87,3 +87,43 @@ def test_genes_are_lifted_as_without_the_option(
     _, paths = all_types_run
     expected = gene_lines(read_feature_lines(expected_dir / 'chr1_basic.gff3'))
     assert gene_lines(read_feature_lines(paths.output)) == expected
+
+
+@pytest.fixture(scope='module')
+def excluded_types_run(
+    tmp_path_factory: pytest.TempPathFactory,
+    copy_chr1_inputs: Callable[[Path], Chr1Inputs],
+    run_cli: Callable[..., RunPaths],
+) -> RunPaths:
+    """Lift all feature types except chromosome regions and centromeres."""
+    workdir = tmp_path_factory.mktemp('chr1_excluded_feature_types')
+    inputs = copy_chr1_inputs(workdir / 'inputs')
+    extra = ['--all-feature-types', '--exclude-feature-types', 'region,centromere']
+    return run_cli(workdir, inputs.target, inputs.reference, inputs.gff, extra)
+
+
+def without_types(lines: list[str], excluded: set[str]) -> list[str]:
+    """Drop records of excluded top-level types together with their descendants."""
+    kept, keep = [], True
+    for line in lines:
+        fields = line.split('\t')
+        if 'Parent=' not in fields[8]:
+            keep = fields[2] not in excluded
+        if keep:
+            kept.append(line)
+    return kept
+
+
+def test_excluded_types_are_absent(excluded_types_run: RunPaths) -> None:
+    features = top_level_features(read_feature_lines(excluded_types_run.output))
+    assert {feature_type for feature_type, _ in features.values()}.isdisjoint(
+        {'region', 'centromere'}
+    )
+
+
+def test_exclusion_only_removes_excluded_records(
+    excluded_types_run: RunPaths, all_types_run: tuple[Chr1Inputs, RunPaths]
+) -> None:
+    _, all_types = all_types_run
+    expected = without_types(read_feature_lines(all_types.output), {'region', 'centromere'})
+    assert read_feature_lines(excluded_types_run.output) == expected

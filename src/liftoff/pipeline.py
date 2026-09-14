@@ -122,7 +122,9 @@ def run_liftoff(config: LiftoffConfig, aligner: Aligner | None = None) -> Liftof
     logger.info('extracting features')
     feature_db = build_database(config.gff, config.db, config.infer_genes, config.infer_transcripts)
     try:
-        hierarchy, parent_order = separate_parents_and_children(feature_db, parent_types)
+        hierarchy, parent_order = separate_parents_and_children(
+            feature_db, parent_types, config.exclude_feature_types
+        )
         ctx = _Context(config, aligner, feature_db, hierarchy, parent_order, {})
         return _run_stages(ctx, ref_chroms, target_chroms)
     finally:

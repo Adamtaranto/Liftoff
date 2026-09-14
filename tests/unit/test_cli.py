@@ -49,6 +49,12 @@ class TestParsing:
             pytest.param(
                 ['--all-feature-types'], 'all_feature_types', True, id='all-feature-types'
             ),
+            pytest.param(
+                ['--exclude-feature-types', 'region, centromere', '--exclude-feature-types', 'gap'],
+                'exclude_feature_types',
+                ('region', 'centromere', 'gap'),
+                id='exclude-feature-types-repeated',
+            ),
             pytest.param(['--polish'], 'polish', True, id='polish'),
             pytest.param(['--no-cds'], 'cds', False, id='no-cds'),
             pytest.param(['--exclude-partial'], 'exclude_partial', True, id='exclude-partial'),
@@ -77,6 +83,25 @@ class TestParsing:
                 ['-g', 'a.gff', '-f', 't.txt', '--all-feature-types', 't.fa', 'r.fa']
             )
         assert 'not allowed with argument' in capsys.readouterr().err
+
+    def test_exclusions_combine_with_all_feature_types(self) -> None:
+        config = parse(
+            '-g',
+            'a.gff',
+            '--all-feature-types',
+            '--exclude-feature-types',
+            'region',
+            't.fa',
+            'r.fa',
+        )
+        assert (config.all_feature_types, config.exclude_feature_types) == (True, ('region',))
+
+    def test_empty_excluded_type_is_a_usage_error(self, capsys: pytest.CaptureFixture[str]) -> None:
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(
+                ['-g', 'a.gff', '--exclude-feature-types', 'region,', 't.fa', 'r.fa']
+            )
+        assert 'empty name' in capsys.readouterr().err
 
     def test_verbose_and_quiet_are_mutually_exclusive(self) -> None:
         with pytest.raises(SystemExit):

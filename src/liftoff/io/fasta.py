@@ -172,8 +172,9 @@ def write_gene_sequences(
     sorted_parents = sorted(parent_dict.values(), key=lambda feature: feature.seqid)
     if not sorted_parents:
         raise InputError(
-            'GFF does not contain any gene features. '
-            'Use --feature-types to provide a list of other feature types to lift over.'
+            'no top-level features were selected for lift-over: the annotation contains no '
+            'features of the selected types (genes by default). Use --feature-types or '
+            '--all-feature-types to select other types, or check --exclude-feature-types.'
         )
     mode = 'a' if liftover_type == LiftoverType.UNPLACED else 'w'
     for chrom in ref_chroms:
