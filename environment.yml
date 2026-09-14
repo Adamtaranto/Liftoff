@@ -8,7 +8,7 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
-  - python=3.13
+  - python>=3.12 # CI selects the exact version via create-args
   - pip
   # External aligner used by the native alignment backend
   - minimap2>=2.28
