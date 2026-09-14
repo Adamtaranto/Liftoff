@@ -4,7 +4,7 @@
 [![CI](https://github.com/agshumate/Liftoff/actions/workflows/CI.yml/badge.svg)](https://github.com/agshumate/Liftoff/actions/workflows/CI.yml)
 ![Stars](https://img.shields.io/github/stars/agshumate/Liftoff?style=plastic)
 
-<img width="200" src="https://github.com/agshumate/Liftoff/blob/master/liftoff_logo_current_dark_mode4.svg">
+<img width="200" src="docs/images/liftoff_logo_current_dark_mode4.svg" alt="Liftoff logo">
 Liftoff is a tool that accurately maps annotations in GFF or GTF between assemblies of the same, or closely-related species. Unlike current coordinate lift-over tools which require a pre-generated “chain” file as input, Liftoff is a standalone tool that takes two genome assemblies and a reference annotation as input and outputs an annotation of the target genome. Liftoff uses Minimap2 [(Li, 2018)](https://academic.oup.com/bioinformatics/article/34/18/3094/4994778) to align the gene sequences from a reference genome to the target genome. Rather than aligning whole genomes, aligning only the gene sequences allows genes to be lifted over even if there are many structural differences between the two genomes. For each gene, Liftoff finds the alignments of the exons that maximize sequence identity while preserving the transcript and gene structure.  If two genes incorrectly map to overlapping loci, Liftoff determines which gene is most-likely mis-mapped, and attempts to re-map it. Liftoff can also find additional gene copies present in the target assembly that are not annotated in the reference.
 
 

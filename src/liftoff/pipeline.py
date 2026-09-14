@@ -419,25 +419,5 @@ def _find_and_polish_broken_cds(ctx: _Context, unmapped: list[Feature]) -> None:
     for feature_id, polished_features in polished.items():
         original = ctx.lifted[feature_id][0].attributes
         candidate = polished_features[0].attributes
-        if _polished_is_better(original, candidate):
+        if polish.polished_is_better(original, candidate):
             ctx.lifted[feature_id] = polished_features
-
-
-def _polished_is_better(original: dict[str, list[str]], polished: dict[str, list[str]]) -> bool:
-    """Compare a polished gene with the original lift-over.
-
-    Genes are ranked by the number of valid ORFs, then sequence identity, then
-    coverage (all compared numerically); the polished version replaces the
-    original only if it ranks strictly higher. A gene without a ``valid_ORFs``
-    attribute (no lifted CDS) counts as having zero valid ORFs.
-    """
-    return _polish_rank(polished) > _polish_rank(original)
-
-
-def _polish_rank(attributes: dict[str, list[str]]) -> tuple[int, float, float]:
-    """Sort key ``(valid ORFs, identity, coverage)`` for polished gene selection."""
-    return (
-        int(attributes.get('valid_ORFs', ['0'])[0]),
-        float(attributes['sequence_ID'][0]),
-        float(attributes['coverage'][0]),
-    )

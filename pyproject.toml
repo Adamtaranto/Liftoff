@@ -118,7 +118,7 @@ quote-style = "single"
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src"]
+files = ["src", "tests"]
 exclude = ["src/liftoff/_version.py"]
 # Biopython ships no type annotations.
 untyped_calls_exclude = ["Bio"]
@@ -138,15 +138,34 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 minversion = "9.0"
 testpaths = ["tests"]
-addopts = ["-ra", "--strict-markers", "--import-mode=importlib"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
 markers = [
+  "unit: fast, isolated tests (applied to tests/unit automatically)",
+  "integration: end-to-end lift-overs (applied to tests/integration automatically)",
   "minimap2: requires the minimap2 executable on PATH",
   "slow: long-running whole-genome integration tests",
+]
+xfail_strict = true
+# Unclosed files/connections are test failures. Later entries take precedence:
+# gffutils' parser leaves NamedTemporaryFile objects for the garbage collector,
+# which Python 3.14 reports; that third-party leak is ignored.
+filterwarnings = [
+  "error::ResourceWarning",
+  "error::pytest.PytestUnraisableExceptionWarning",
+  "ignore:Implicitly cleaning up <_TemporaryFileWrapper:ResourceWarning",
+  "ignore:Exception ignored .*_TemporaryFileCloser:pytest.PytestUnraisableExceptionWarning",
 ]
 
 [tool.coverage.run]
 source = ["liftoff"]
+branch = true
 omit = ["*/_version.py"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = true
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
 
 [tool.numpydoc_validation]
 checks = [

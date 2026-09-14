@@ -19,7 +19,7 @@ from Bio.Seq import reverse_complement
 
 from liftoff.align.semiglobal import Alignment, ScoringMatrix, sg_dx_trace
 from liftoff.cds import features_by_type, features_lookup
-from liftoff.models import Feature, FeatureHierarchy
+from liftoff.models import Attributes, Feature, FeatureHierarchy
 from liftoff.utils import LiftedFeatures, merge_children_intervals, merge_intervals
 
 #: Gap penalties used when re-aligning exons.
@@ -522,3 +522,35 @@ def condense_cigar_string(expanded_cigar: str, hard_clip_start: int) -> str:
     if hard_clip_start > 0:
         cigar = f'{hard_clip_start}H{cigar}'
     return cigar
+
+
+def polished_is_better(original: Attributes, polished: Attributes) -> bool:
+    """Decide whether a polished gene should replace the original lift-over.
+
+    Genes are ranked by the number of valid ORFs, then sequence identity, then
+    coverage (all compared numerically); the polished version replaces the
+    original only if it ranks strictly higher. A gene without a ``valid_ORFs``
+    attribute (no lifted CDS) counts as having zero valid ORFs.
+
+    Parameters
+    ----------
+    original : dict of str to list of str
+        Attributes of the original lifted top-level feature.
+    polished : dict of str to list of str
+        Attributes of the polished top-level feature.
+
+    Returns
+    -------
+    bool
+        ``True`` if the polished gene ranks strictly higher.
+    """
+    return _polish_rank(polished) > _polish_rank(original)
+
+
+def _polish_rank(attributes: Attributes) -> tuple[int, float, float]:
+    """Sort key ``(valid ORFs, identity, coverage)`` for polished gene selection."""
+    return (
+        int(attributes.get('valid_ORFs', ['0'])[0]),
+        float(attributes['sequence_ID'][0]),
+        float(attributes['coverage'][0]),
+    )

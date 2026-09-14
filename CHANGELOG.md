@@ -35,15 +35,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `python -m liftoff` entry point and `py.typed` marker.
 - `environment.yml` conda environment, GitHub Actions CI (ruff, mypy, pytest on Linux and macOS
   with Python 3.12–3.14, Pyodide tests), pre-commit hooks and this changelog.
-- Extensive tests: whole-genome and chromosome I integration tests against recorded reference
-  outputs, parasail comparison corpora, and unit tests for SAM parsing, alignment blocks, CDS
-  handling, polishing, output formatting and the CLI.
+- Test suite organised into `tests/unit` and `tests/integration` (auto-applied `unit` /
+  `integration` markers) with shared factory fixtures, module-scoped pipeline runs, integration
+  scenarios parametrized across alignment backends, unit tests for every module, strict
+  resource-warning checks and a 90% branch-coverage threshold. Includes whole-genome and
+  chromosome I integration tests against recorded reference outputs and parasail comparison
+  corpora.
 
 ### Changed
 
 - Packaging migrated from `setup.py` to `pyproject.toml`, built with hatchling; the version is
   derived from git tags with hatch-vcs. The package now uses a `src/` layout, and tests moved to
   the repository root.
+- Logo images moved to `docs/images/`; the README references them by relative path.
 - Code reorganised into `align`, `io` and `mapping` subpackages with typed dataclass models,
   full type hints (mypy strict) and numpydoc docstrings.
 - **Removed the `parasail` dependency**: polishing uses a NumPy port of

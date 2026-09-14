@@ -29,3 +29,10 @@ unmapped_features.txt
 .idea/
 .vscode/
 .DS_Store
+
+# Agents
+.claude/
+.claudeignore
+.env
+.mcp.json
+CLAUDE.md
