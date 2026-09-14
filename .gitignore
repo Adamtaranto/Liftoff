@@ -1,2 +1,38 @@
-Liftoff.egg-info/
+# Packaging / build
+*.egg-info/
+build/
+dist/
+src/liftoff/_version.py
+
+# Python caches
 __pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Virtual environments
+.venv*/
+.pyodide-xbuildenv*/
+
+# Liftoff by-products created next to inputs
+*.mmi
+*.fai
+*_db
+intermediate_files/
+unmapped_features.txt
+
+# Editors
+.idea/
+.vscode/
+.DS_Store
+
+# Agents
+.claude/
+.claudeignore
+.env
+.mcp.json
+CLAUDE.md

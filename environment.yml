@@ -1,0 +1,30 @@
+# Conda environment for developing and running Liftoff.
+#
+#   mamba env create -f environment.yml
+#   mamba activate liftoff
+#
+name: liftoff
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python>=3.12 # CI selects the exact version via create-args
+  - pip
+  # External aligner used by the native alignment backend
+  - minimap2>=2.28
+  # Runtime dependencies (see pyproject.toml)
+  - biopython>=1.87
+  - gffutils>=0.14
+  - networkx>=3.6
+  - numpy>=2.4
+  - pyfaidx>=0.9
+  # Development tools
+  - hatch
+  - hatch-vcs
+  - mypy>=2.3
+  - pre-commit>=4.6
+  - pytest>=9.1
+  - pytest-cov>=7.1
+  - ruff>=0.16
+  - pip:
+      - -e .
